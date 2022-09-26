@@ -1,8 +1,50 @@
-function [W,H,step,error_converge,cost_converge,adj_cost,l1cost,l2cost]=reg_als(A,k,alpha,beta,gamma,delta,tolerance,maxsteps,initialize,SigmaMat,sigma,range)
-rng(range)
-conv_by_cost=true;
+function [W,H,step,error_converge,cost_converge,adj_cost,l1cost,l2cost]=reg_als(A,k,alpha,beta,gamma,delta,tolerance,maxsteps,initialize,SigmaMat,sigma)
+
+
+%A(matrix): Data Matrix
+%k(int): Target rank
+%gamma(int): l2 regularization for W 
+%delta(int): l2 regularization for H 
+%alpha(int): l1 regularization for W 
+%beta(int): l1 regularization for H
+%tolerance(int): For stopping the algorithm: If change of cost function
+%   divided by the initial value of the cost function is below tolerance
+%   for 3 consecutive steps, the algorithm halts
+%maxsteps(int): maximum steps of the algorithm
+%initialize(string, 3 choices): Initialization of Factor Matrices:
+%   random: absolute value of random normals, with mean as the mean of the
+%   data matrix divided by the uncertainties
+%   nndsvd: positive version of a randomized SVD, negative elements filled
+%   to zeros
+%   nndsvdmean: positive version of a randomized SVD, negative elements
+%   filled with mean of data matrix divided by the uncertainties
+%SigmaMat(matrix): Uncertainties Matrix
+%sigma(boolean): If true, Weighted NNMF is ran, if false, external
+%weighting is ran (if proj_back is also true)
+
+% Objective: min_{W,Ht} ||(R(j)-W(:,j)*Ht(:,j)')./\SigmaMat||_F^2+
+%   ||W(:,j)||_1+||Ht(:,j)||_1+||W(:,j)||_2^2+||Ht(:,j)||_2^2
+%   where R(j)=A-\sum_{i ~= j}W(:,i)*Ht(:,i)'
+
+%W,H: Factor Matrices
+%Step(int): Steps in iteration
+%error_converge(vector of size maxsteps+1): Weighted error at each step,
+%with first element being 0th step
+%cost_converge(vector of size maxsteps+1): Cost function at each step,
+%with first element being 0th step
+%%adj_cost(vector of size maxsteps): Cost function divided by initial value
+% at each step
+%l1cost(vector of size maxsteps+1): Combined L1 norm of factor matrices at
+%each step, with first element being 0th step
+%l2cost(vector of size maxsteps+1): Combined L2 norm of factor matrices at
+%each step, with first element being 0th step
+
+
 proj_grad=false;
-proj_back=true;
+conv_by_cost=true; %Converge by Cost Function - Projected Gradient didn't 
+% seem to work for MU
+proj_back=true; %if MU with external weighting is to be ran - if false &
+% sigma is false, then unweighted MU is ran
 
 
 if(proj_back==true && sigma==false)  %External Weighting is ran
@@ -16,17 +58,7 @@ A1=zeros(size(A));
 pmf=true;
 check1=false; %First check for stopping criterion
 check2=false; %Second check for stopping criterion
-method=1;
-shi=false;
-%This is translated from Python function compute_rnmf from Ristretto Folder
-%Folder linked from Erichson '18
 
-%A: matrix, k: target rank, gamma: l2 regularization for
-%W, delta: l2 regularization for H, alpha: l1 regularization for W, beta:
-%l1 regularization for H, tolerance: for stopping algorithm, maxsteps:
-%maximum steps of the algorithm
-
-expectation_maximization=false;
 
 %If matrix is column heavy
 flipped=false;
@@ -35,17 +67,6 @@ if(m<n)
     flipped=false;
     A=A';
     [m,n]=size(A);
-end
-
-%Add this later?
-if(~exist('maxsteps','var'))
-    maxsteps=100;
-end
-if(~exist('tolerance','var'))
-    tolerance=1*10^(-3);
-end
-if(~exist('initialize','var'))
-    initialize='random';
 end
 
 %Initialize
@@ -87,22 +108,12 @@ if(conv_by_cost==true)
         l2cost(1)=W2cost+H2cost;
     end
 end
-%Expectation Maximization Step
-if(expectation_maximization==true)
-    weights1=ones(size(A))./SigmaMat;
-end
 
 %Set Weights
 Weights=ones(size(A));
-if(sigma==true && expectation_maximization==false)
-    if(method==1 || shi==false)
-        Smat2=SigmaMat.^2;
-        Weights=Weights./Smat2;
-    end
-    if(shi==true && method==2)
-        Si=sum(Smat2,1);
-        Sj=sum(Smat2,2);
-    end
+if(sigma==true)
+    Smat2=SigmaMat.^2;
+    Weights=Weights./Smat2;
 end
 
 
@@ -117,23 +128,14 @@ if(proj_grad==true)
     violations=zeros(1,maxsteps); %Possible speed boost by tracking the 
 %   projected gradient of the factor matrices as a stopping condition - not
 %   extensively tested
-    %time_projgrad(1)=toc;
 end
 
 
 
 
 %Main algorithm
-if(expectation_maximization==true)
-    sigma=false;
-    true_A=A; %Remember what original data matrix is
-end
 for step=1:maxsteps
-    %Alternating Least Squares Internal Weighting
-    if(expectation_maximization==true)
-        A=weights1.*A+(ones(size(A))-weights1).*(W*H);
-    end
-    if(sigma==true && method==1)
+    if(sigma==true) %Weighted iteration
         violation=0;
         for j=1:size(A,2)
             H1=W'*(repmat(Weights(:,j),1,k).*W)+delta*eye(k);
@@ -175,43 +177,7 @@ for step=1:maxsteps
                 W(W<0)=0;
             end
         end
-    end
-    if(sigma==true && method==2)
-       for j=1:size(A,2)
-           if(shi==false)
-               Sjneg1=diag(Weights(:,j));
-           else
-               Sjneg1=diag(1./Sj);
-           end
-       part1=W/(W'*Sjneg1*W);
-       A1(:,j)=part1*W'*Sjneg1*A(:,j);
-       end
-       H1=W'*W+delta*eye(k);
-       for j=1:size(A,2)
-           H2=W'*A1(:,j)-beta*ones(k,1);
-           H(:,j)=H1\H2;
-       end
-       if(pmf==true)
-           H(H<0)=0;
-       end
-       for i=1:size(A,1)
-           if(shi==false)
-               Sineg1=diag(Weights(i,:));
-           else
-               Sineg1=diag(1./Si);
-           end
-           part2=(Ht'*Sineg1*Ht)\Ht';
-           A1(i,:)=A(i,:)*Sineg1*Ht*part2;
-       end
-       W2=H*H'+gamma*eye(k);
-       for i=1:size(A,1)
-           W1=A1(i,:)*H'-alpha*ones(1,k);
-           W(i,:)=W1/W2;
-       end
-       if(pmf==true)
-           W(W<0)=0;
-       end
-    end
+    end %Unweighted iteration
     if(sigma==false)
         violation=0;
         H1=W'*W+delta*eye(k);
@@ -259,10 +225,6 @@ for step=1:maxsteps
     end
     Ht=H';
     
-    %Indicator Calculation
-    if(expectation_maximization==true)
-        A=true_A; %remember what true A is
-    end
 
 
 
@@ -293,13 +255,11 @@ for step=1:maxsteps
 
 
     if(proj_grad==true)
-        %tic
         violations(step)=violation;
         adj_violation(step)=violations(step)/violations(1);
         if(step>=2)
             stop_cond=abs(adj_violation(step)-adj_violation(step-1));
         end
-        %time_projgrad(step+1)=time_projgrad(step+1)+toc;
     end
 
 
@@ -378,22 +338,3 @@ if(flipped==true)
     H=(W1)';
 end
 end
-
-%Initialize With ones
-% fac=rand(1,1);
-% if(sigma==false)
-%     W=ones(m,k)/sqrt(k);
-%     Ht=ones(n,k)/sqrt(k);
-% else
-%     W=B;
-%     Ht=C';
-% end
-
-
-% if(~exist('SigmaMat','var'))
-%     sigma=false;
-%     Weights=ones(m,n);
-% else
-%     Weights=ones(m,n)./SigmaMat;
-%     %sigma=true;
-% end

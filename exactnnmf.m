@@ -1,10 +1,64 @@
 %%Matlab Code from https://www.researchgate.net/profile/N-Erichson/publication/320891179_Randomized_Nonnegative_Matrix_Factorization/links/5af889980f7e9b026beb41ec/Randomized-Nonnegative-Matrix-Factorization.pdf?origin=publication_detail
-function [W,H,step,error_converge,cost_converge,adj_cost,l1cost,l2cost]=exactnnmf(A,k,alpha,beta,gamma,delta,tolerance,maxsteps,initialize,SigmaMat,sigma,pullW,pullH,a,b,range)
-rng(range);
-conv_by_cost=false;
-proj_grad=true;
-proj_back=true;
-rank_one_scaling=false;
+function [W,H,step,error_converge,cost_converge,adj_cost,l1cost,l2cost]=exactnnmf(A,k,alpha,beta,gamma,delta,tolerance,maxsteps,initialize,SigmaMat,sigma,pullW,pullH,a,b)
+
+
+%This is translated from Python function compute_rnmf from Ristretto Folder
+%Folder referred to from Erichson '17
+
+%A(matrix): Data Matrix
+%k(int): Target rank
+%gamma(int): l2 regularization for W 
+%delta(int): l2 regularization for H 
+%alpha(int): l1 regularization for W 
+%beta(int): l1 regularization for H
+%tolerance(int): For stopping the algorithm: If change of cost function
+%   divided by the initial value of the cost function is below tolerance
+%   for 3 consecutive steps, the algorithm halts
+%maxsteps(int): maximum steps of the algorithm
+%initialize(string, 3 choices): Initialization of Factor Matrices:
+%   random: absolute value of random normals, with mean as the mean of the
+%   data matrix divided by the uncertainties
+%   nndsvd: positive version of a randomized SVD, negative elements filled
+%   to zeros
+%   nndsvdmean: positive version of a randomized SVD, negative elements
+%   filled with mean of data matrix divided by the uncertainties
+%SigmaMat(matrix): Uncertainties Matrix
+%sigma(boolean): If true, Weighted NNMF is ran, if false, unweighted NNMF 
+%   is ran
+%pullW(boolean): If true, pullH is false, and values of W are pulled up
+%(values of H are pulled down)
+%pullH(boolean): If true, pullW is false, and values of H are pulled up 
+%(values of H are pulled down)
+% a: Parameter by which to pull H up or down
+% b: Parameter by which to pull W up or down
+
+% Objective: min_{W,Ht} ||(R(j)-W(:,j)*Ht(:,j)')./\SigmaMat||_F^2+
+%   ||W(:,j)||_1+||Ht(:,j)||_1+||W(:,j)||_2^2+||Ht(:,j)||_2^2
+%   where R(j)=A-\sum_{i ~= j}W(:,i)*Ht(:,i)'
+
+%W,H: Factor Matrices
+%Step(int): Steps in iteration
+%violations(vector of size maxsteps+1): -- sub out for error_converge in 
+% return values if proj_grad is true -- Violation (Projected Gradient 
+%   Squared) at each step, with first element being 0th step
+%error_converge(vector of size maxsteps+1): Weighted error at each step,
+%with first element being 0th step
+%cost_converge(vector of size maxsteps+1): Cost function at each step,
+%with first element being 0th step
+%%adj_cost(vector of size maxsteps): Cost function divided by initial value
+% at each step
+%l1cost(vector of size maxsteps+1): Combined L1 norm of factor matrices at
+%each step, with first element being 0th step
+%l2cost(vector of size maxsteps+1): Combined L2 norm of factor matrices at
+%each step, with first element being 0th step
+
+
+
+
+
+conv_by_cost=false; %Converge by cost function
+proj_grad=true; %Projected gradien
+proj_back=true; %Project back using external weighting
 
 
 %Deal with column heavy matrix
@@ -17,23 +71,6 @@ if(m<n)
 end
 
 
-if(rank_one_scaling==true && sigma==false)
-    Weights=ones(size(A))./SigmaMat;
-    B=ones(1,m);
-    C=zeros(n,1);
-    for its=1:2
-        for j=1:n
-            C(j)=B*Weights(:,j)/(B*B');
-        end
-        for i=1:m
-            B(i)=Weights(i,:)*C/(C'*C);
-        end
-    end
-    A1=A;
-    A=repmat(B',1,n).*A.*repmat(C',m,1);
-end
-
-
 
 if(proj_back==true && sigma==false)  %External Weighting is ran
     A1=A;
@@ -43,26 +80,7 @@ end
 
 check1=false; %First check for stopping criterion
 check2=false; %Second check for stopping criterion
-%This is translated from Python function compute_rnmf from Ristretto Folder
-%Folder linked from Erichson '18
 
-%A: matrix, k: target rank, gamma: l2 regularization for
-%W, delta: l2 regularization for H, alpha: l1 regularization for W, beta:
-%l1 regularization for H, tolerance: for stopping algorithm, maxsteps:
-%maximum steps of the algorithm
-
-expectation_maximization=false;
-
-%Deal with this when making final algorithm
-if(~exist('maxsteps','var'))
-    maxsteps=100;
-end
-if(~exist('tolerance','var'))
-    tolerance=1*10^(-3);
-end
-if(~exist('initialize','var'))
-    initialize='random';
-end
 
 %Initialization
 [W,H]=initializefactors(A,k,initialize);
@@ -111,17 +129,9 @@ if(conv_by_cost==true)
 end
 
 
-
-
-
-%Expectation Maximum Calculation
-if(expectation_maximization==true)
-    weights1=ones(size(A))./SigmaMat;
-end
-
 %Set weights
 Weights=ones(size(A));
-if(sigma==true && expectation_maximization==false)
+if(sigma==true)
     Smat2=SigmaMat.^2;
     Weights=Weights./Smat2;
 end
@@ -257,12 +267,6 @@ end
 
 
 if(proj_back==true && sigma==false) %Weighted NNMF is ran
-    %wh=(W*H).*SigmaMat;
-    %[W_final,H_final]=exactnnmf(wh,k,1*10^(-5),1*10^(-5),1*10^(-3),1*10^(-3),tolerance,maxsteps,initialize,SigmaMat,false,pullW,pullH,a,b,range);
-    %[W_final,H_final]=randomized_nnmf(wh,k,p,0,0,0,0,tolerance,maxsteps,initialize,SigmaMat,false,like_ristretto,wtwtilde,pullW,pullH,a,b,range);
-    %[W_final,H_final]=mult_update(wh,k,0,0,0,0,10^(-5),maxsteps,'random',SigmaMat,false,range);
-    %W=W_final;
-    %H=H_final;
 
 
     iter=20;
@@ -307,181 +311,3 @@ end
 
 end
 
-
-%     Wnorm=norm(W,'fro');
-%     Hnorm=norm(H,'fro');
-%     gradWnorm=norm(gradW,'fro');
-%     gradHnorm=norm(gradHt,'fro');
-%     numzerosW=length(W(W==0));
-%     numzerosH=length(Ht(Ht==0));
-%     data=[step,violations(step),error_converge(step),weighted_errorconverge(step),Wvalues(1,step),Wvalues(2,step),Wvalues(3,step),Wvalues(4,step),Hvalues(1,step),Hvalues(2,step),Hvalues(3,step),Hvalues(4,step)];
-%     fprintf('%d\t\t\t%.2f\t\t\t%.5f\t\t%.5f\t\t\t\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n',data)
-%     data=[step,violations(step),error_converge(step),violationW,violationH,gradWnorm,gradHnorm,dgW,dgH];
-%     fprintf('%d\t\t\t%.2f\t\t\t%.5f\t\t%.2f\t\t%.2f\t\t\t\t%.2f\t\t\t%.2f\t\t\t\t%d\t\t%d\n',data)
-%     data=[step,violations(step),error_converge(step),weighted_errorconverge(step)];
-%     fprintf('%d\t\t\t%.2f\t\t\t%.5f\t\t%.5f\n',data)
-%     if(step>=3)
-%         if(std([violations(step),violations(step-1),violations(step-2)])/mean(violations(2:step))<=tolerance || (violations(step)>violations(step-1)&violations(step-1)>violations(step-2)))
-%             break
-%         end
-%     end
-
-%Initialize With ones
-% fac=rand(1,1);
-% if(sigma==false)
-%     W=ones(m,k)/sqrt(k);
-%     Ht=ones(n,k)/sqrt(k);
-% else
-%     W=B;
-%     Ht=C';
-% end
-
-
-% if(~exist('SigmaMat','var'))
-%     sigma=false;
-%     Weights=ones(m,n);
-% else
-%     Weights=ones(m,n)./SigmaMat;
-%     %sigma=true;
-% end
-
-
-
-
-
-
-%     if(proj_back==true && sigma==false)
-%         H_exact=Ht';
-%         W_exact=W;
-%         H_0=sqrt(mean(A.*SigmaMat,'all')/k)*(H_exact/mean(H_exact,'all'));
-%         change_each_step=zeros(1,20);
-%         wh=(W_exact*H_exact).*SigmaMat;
-%         if(sigma==false)
-%     %H_final=sqrt(mean(A_small,'all')/k)*(0.5*ones(size(H_exact))+rand(size(H_exact))); %H is initiated near the values of the actual H
-%             H_final=H_0;
-%             for i=1:20
-%                 if(i>=2)
-%                     W_prev=W_final;
-%                     H_prev=H_final;
-%                 else
-%                     W_prev=W_exact;
-%                     H_prev=H_0;
-%                 end
-%                 W_final=wh*pinv(H_final);
-%                 H_final=pinv(W_final)*wh;
-%                 change_each_step(i)=norm(W_final-W_prev,'fro')/norm(W_prev,'fro')+norm(H_final-H_prev,'fro')/norm(H_prev,'fro');
-%                 if(change_each_step(i)<.0001)
-%                     i
-%                     break
-%                 end
-% %         e_each_step(i)=norm((A-W_final*H_final)./sig,'fro');
-%             end
-%             W_last=W;
-%             H_last=Ht';
-%             W=W_final;
-%             Ht=H_final';
-%         end
-%         error_converge(step+1)=norm((A.*SigmaMat-W*Ht')./SigmaMat,'fro')^2;
-%         W1cost=sum(sum(W));
-%         H1cost=sum(sum(Ht));
-%         W2cost=norm(W,'fro')^2;
-%         H2cost=norm(Ht,'fro')^2;
-%         l1cost(step+1)=alpha*W1cost+beta*H1cost;
-%         l2cost(step+1)=gamma*W2cost+delta*H2cost;
-%         cost_converge(step+1)=error_converge(step+1)+l1cost(step+1)+l2cost(step+1);
-%         adj_cost(step+1)=cost_converge(step+1)/cost_converge(1);
-%         if(alpha==0 && beta==0)
-%             l1cost(step+1)=W1cost+H1cost;
-%         end
-%         if(gamma==0 && delta==0)
-%             l2cost(step+1)=W2cost+H2cost;
-%         end
-%         Ht=H_last';
-%         W=W_last;
-%     end 
-
-
-
-
-
-
-
-
-% % init=true;
-% % [~,~,violation_init]=updateWH(A,W,Ht,sigma,init,alpha,beta,gamma,delta,SigmaMat,random);
-% step=0;
-%     if(proj_back==false || sigma==true)
-%         if(sigma==false)
-%             error_converge(step+1)=norm(A-W*Ht','fro')^2;
-%         else
-%             error_converge(step+1)=norm((A-W*Ht')./SigmaMat,'fro')^2;
-%         end
-%         W1cost=sum(sum(W));
-%         H1cost=sum(sum(Ht));
-%         W2cost=norm(W,'fro')^2;
-%         H2cost=norm(Ht,'fro')^2;
-%         l1cost(step+1)=alpha*W1cost+beta*H1cost;
-%         l2cost(step+1)=gamma*W2cost+delta*H2cost;
-%         cost_converge(step+1)=error_converge(step+1)+l1cost(step+1)+l2cost(step+1);
-%         adj_cost(step+1)=cost_converge(step+1)/cost_converge(1);
-%         if(alpha==0 && beta==0)
-%             l1cost(step+1)=W1cost+H1cost;
-%         end
-%         if(gamma==0 && delta==0)
-%             l2cost(step+1)=W2cost+H2cost;
-%         end
-%     end
-%     
-%     
-%     
-%     
-%     
-%     if(proj_back==true && sigma==false)
-%         H_exact=Ht';
-%         W_exact=W;
-%         H_0=sqrt(mean((A.*SigmaMat),'all')/k)*(H_exact/mean(H_exact,'all'));
-%         change_each_step=zeros(1,20);
-%         wh=(W_exact*H_exact).*SigmaMat;
-%         if(sigma==false)
-%     %H_final=sqrt(mean(A_small,'all')/k)*(0.5*ones(size(H_exact))+rand(size(H_exact))); %H is initiated near the values of the actual H
-%             H_final=H_0;
-%             for i=1:20
-%                 if(i>=2)
-%                     W_prev=W_final;
-%                     H_prev=H_final;
-%                 else
-%                     W_prev=W_exact;
-%                     H_prev=H_0;
-%                 end
-%                 W_final=wh*pinv(H_final);
-%                 H_final=pinv(W_final)*wh;
-%                 change_each_step(i)=norm(W_final-W_prev,'fro')/norm(W_prev,'fro')+norm(H_final-H_prev,'fro')/norm(H_prev,'fro');
-%                 if(change_each_step(i)<.0001)
-%                     i
-%                     break
-%                 end
-% %         e_each_step(i)=norm((A-W_final*H_final)./sig,'fro');
-%             end
-%             W_last=W;
-%             H_last=Ht';
-%             W=W_final;
-%             Ht=H_final';
-%         end
-%         error_converge(step+1)=norm((A.*SigmaMat-W*Ht')./SigmaMat,'fro')^2;
-%         W1cost=sum(sum(W));
-%         H1cost=sum(sum(Ht));
-%         W2cost=norm(W,'fro')^2;
-%         H2cost=norm(Ht,'fro')^2;
-%         l1cost(step+1)=alpha*W1cost+beta*H1cost;
-%         l2cost(step+1)=gamma*W2cost+delta*H2cost;
-%         cost_converge(step+1)=error_converge(step+1)+l1cost(step+1)+l2cost(step+1);
-%         adj_cost(step+1)=cost_converge(step+1)/cost_converge(1);
-%         if(alpha==0 && beta==0)
-%             l1cost(step+1)=W1cost+H1cost;
-%         end
-%         if(gamma==0 && delta==0)
-%             l2cost(step+1)=W2cost+H2cost;
-%         end
-%         Ht=H_last';
-%         W=W_last;
-%     end 

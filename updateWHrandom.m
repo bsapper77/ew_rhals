@@ -1,4 +1,4 @@
-function [W,Ht,W_tilde,violation,tpg]=updateWHrandom(B,W,Ht,Q,init,alpha,beta,gamma,delta,W_tilde,like_ristretto,wtwtilde,pullW,pullH,a,b,proj_grad)
+function [W,Ht,W_tilde,violation]=updateWHrandom(B,W,Ht,Q,alpha,beta,gamma,delta,W_tilde,like_ristretto,wtwtilde,pullW,pullH,a,b,proj_grad)
 % Original Code comes from the function _update_cdnmf_fast in the Python
 % library sklearn.decomposition.cdnmf_fast
 
@@ -17,11 +17,18 @@ function [W,Ht,W_tilde,violation,tpg]=updateWHrandom(B,W,Ht,Q,init,alpha,beta,ga
 % wtwtilde(boolean)=Code difference described in Erichson et al: if true,
 % W'*W is calculated in the update rules for greater accuracy over the
 % projected W (W_tilde'*W_tilde)
+% pullW(boolean): If true, W is pulled up, pullH is false
+% pullH(boolean): If true, H is pulled up, pullW is false.
+% If either is true, the other factor matrix is pulled down
+% a(double): pulling of H
+% b(double): pulling of W
+% proj_grad(boolean): Projected gradient used as stopping condition
 
+% W: Left factor matrix
+% Ht: Transpose of H; right factor matrix
+% W_tilde: W projected into lower dimension
 % Violation: Projected gradient in the update
 
-
-tpg=0;
 
 k=size(W,2); %Find number of factors from W
 violation=0;
@@ -54,7 +61,7 @@ for s=1:k %s spans factors
             end
             violation = violation + pg^2; %Violation is total projected gradient
         end
-        %tpg=toc;
+
 
 
         hess = WtW(s, s) + delta; %Hessian value
@@ -70,7 +77,6 @@ if(like_ristretto==false) %We do not pre-project back into the higher dimension
     HHt=Ht'*Ht;
     BHt=B*Ht;
     for s=1:k
-    %t = permutation[s] %Part of Ristretto code: if rows of H are to be updated in a different order
         for i=1:size(W_tilde,1)
             gradW = -BHt(i,s)+alpha+gamma*W_tilde(i,s);
             for r=1:k
@@ -82,8 +88,6 @@ if(like_ristretto==false) %We do not pre-project back into the higher dimension
                 gradW=gradW+b*W_tilde(i,s);
             end
 
-
-            %tic
             if(proj_grad==true)
                 if(W_tilde(i,s) == 0) %Projected gradient for lower
  %                  dimension projection - consider scaling this value since
@@ -94,7 +98,6 @@ if(like_ristretto==false) %We do not pre-project back into the higher dimension
                 end
                 violation = violation + pg^2;
             end
-            %tpg=tpg+toc;
 
 
 
@@ -118,7 +121,6 @@ elseif(like_ristretto==true) %We project back into the higher dimension and upda
     HHt=Ht'*Ht;
     BHt=Q*B*Ht; %Project BHt into higher dimension by multiplying by Q
     for s=1:k
-        %t = permutation[s]
         for i=1:size(W,1)
             gradW= -BHt(i,s)+alpha+gamma*W(i,s);
             for r=1:k
@@ -130,7 +132,6 @@ elseif(like_ristretto==true) %We project back into the higher dimension and upda
                 gradW=gradW+b*W(i,s);
             end
 
-            %tic
             if(proj_grad==true)
                 if(W(i,s) == 0)
                     pg=min(0, gradW);
@@ -139,7 +140,6 @@ elseif(like_ristretto==true) %We project back into the higher dimension and upda
                 end
                 violation = violation + pg^2;
             end
-            %tpg=tpg+toc;
 
 
             hess = HHt(s, s) + gamma;

@@ -1,4 +1,8 @@
 function [W,H]= initializewh(A,k)
+% Copied from sklearn.decomposition.nmf._initialize_nmf
+% Based off Boutsidis and Gallopoulos 2008
+% A: data matrix, k: target rank
+% W,H are initial factor matrix guesses.
 epsilon=1*10^(-7);
 p=10;
 [U,S,V]=LOCAL_rsvd(A,k,p);
