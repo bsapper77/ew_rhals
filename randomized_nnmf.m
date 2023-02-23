@@ -57,6 +57,8 @@ function [W,H,step,violations]=randomized_nnmf(A,k,p,alpha,beta,gamma,delta,tole
 proj_grad=true; %Projected Gradient used as stopping condition
 proj_back=true; %External Weighting is Ran
 
+conv_by_cost=false; % Converge by cost function reaching local min
+
 
 
 check1=false; %For stopping condition
