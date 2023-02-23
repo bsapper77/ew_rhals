@@ -150,8 +150,7 @@ end
 
 %Main Algorithm
 for step=1:maxsteps
-    [W,Ht,W_tilde,violation,tpg]=updateWHrandom(B,W,Ht,Q,alpha,beta,gamma,delta,W_tilde,like_ristretto,wtwtilde,pullW,pullH,a,b,proj_grad); %Run update algorithm
-    %time_projgrad(step+1)=tpg;
+    [W,Ht,W_tilde,violation]=updateWHrandom(B,W,Ht,Q,alpha,beta,gamma,delta,W_tilde,like_ristretto,wtwtilde,pullW,pullH,a,b,proj_grad); %Run update algorithm
 
 
 
