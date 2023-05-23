@@ -190,11 +190,6 @@ H=Ht'; %H is transpose of Ht
 
 % Find actual W and H using pseudoinverses
 
-% NOTE: This code is not adapted from any research papers or pre existing
-% code. The only motivation is that this code seems to produce feasible
-% results and we haven't thought of any better alternatives. More testing
-% needs to be done on the convergence of this method to feasible solutions
-
 % The method attempts to solve W*H=(W_alg*H_alg).*SigmaMat, where W_alg and
 % H_alg are the factor matrices from the algorithm in which A is predivided
 % by SigmaMat (the uncertainties). The term ".*" refers to elementwise 
